@@ -124,3 +124,20 @@ nodes disappear on their own once offline.
 - gVisor (`runtime: runsc`) for nodes that run untrusted or agent-written
   code.
 - Replace the toy `app/server.clj` with Frank's real bb services.
+- OAuth run on the real tailnet: one OAuth client per role (`auth_keys`
+  scope, one tag each), `TS_CLIENT_SECRET_*` in `.env`, no hand-made keys.
+  The tsproxy side is done but untested.
+- Control-outage test (`test-control-outage.sh`). Steps: stop headscale,
+  confirm `web → api` still works, remove the rule and confirm it does *not*
+  take effect, restart one node and see whether it recovers without
+  control, then restart headscale and measure how long revocation takes.
+- Fail-closed tsproxy: refuse ingress (or only sensitive operations) after
+  N minutes without contact with control.
+- Scale test: `SCALE=200`+ `api-pool` replicas. Measure netmap size,
+  Headscale memory and policy-reload time to every node.
+- App capabilities: tsproxy forwards `WhoIs` `CapMap` as a header
+  (e.g. `X-Tailnet-Caps`). Test a grant with an `app` section on Headscale
+  (is it supported?) and on the real tailnet.
+- Role proxy with audit (`docs/tailnet-map.html` section 8): an
+  `admin-proxy` service, `X-Tailnet-On-Behalf-Of`, and a
+  `TRUSTED_FORWARDERS` tag list on the receiving tsproxy.
