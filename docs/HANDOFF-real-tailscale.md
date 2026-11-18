@@ -165,3 +165,9 @@ nodes disappear on their own once offline.
     key, for receivers that never met the client. They learn the proxy's
     key from their own direct connection to it and decide whether to trust
     it as a witness.
+  Ephemeral-key variant (section 10, "Ephemeral keys"): make a fresh
+  keypair per signed message and send `Tailnet-Key-Binding` with it. No key
+  storage and no stale cache. The cost: someone has to check the binding
+  against WhoIs for each message, either the target directly or a witness it
+  trusts. Compare with a chain: an ephemeral key signed by a longer-lived
+  key that targets already know first-hand.

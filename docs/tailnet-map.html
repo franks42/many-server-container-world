@@ -945,6 +945,20 @@ stateDiagram-v2
     </div>
     <figcaption>Nobody issues anything. Each relying party checks the binding against a WireGuard connection it saw itself, and WhoIs is the only outside fact. Replay fails: if another node sends alice's binding over its own connection, WhoIs doesn't match. Requiring the identity inside the binding is what stops a node from getting someone else's key attributed to itself. There are two limits. First, a direct check needs a connection, so in the HR example alice needs a grant to hr-api (say, a key-registration port only), or step 3. Second, the cache can go stale: a binding is only as current as control's view of the node, so give it a TTL and re-check on reconnect. This is a design sketch; none of it is in tsproxy.</figcaption>
   </figure>
+  <p><strong>Wire format.</strong> Everything travels as HTTP headers. The client-sent ones deliberately don't start with <code>X-Tailnet-</code>, because ingress strips those as spoofable.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Header</th><th>Sent by → to</th><th>Content</th><th>Receiver checks</th></tr></thead>
+    <tbody>
+      <tr><td><code>Tailnet-Key-Binding</code></td><td>client → any hop</td><td>self-signed JWS <code>{id, key, t}</code> (Ed25519)</td><td>signature; <code>id</code> == WhoIs of the connection; cache thumbprint → id</td></tr>
+      <tr><td><code>X-Tailnet-Key</code></td><td>ingress → own app (loopback)</td><td>verified key thumbprint</td><td>nothing: plain header inside the trust boundary</td></tr>
+      <tr><td><code>Tailnet-Assertion</code></td><td>client → via relays → target</td><td>JWS <code>{sub, act, aud, exp}</code> signed with the client's key</td><td>key known → <code>sub</code>; <code>act</code> == WhoIs caller; <code>aud</code>, <code>exp</code></td></tr>
+      <tr><td><code>Tailnet-Binding-Witness</code></td><td>forwarding proxy → next hop</td><td>JWS <code>{binding: hash, observed: &lt;WhoIs id&gt;, t}</code> signed with the proxy's key</td><td>proxy's key known first-hand; proxy trusted as a witness for names</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><strong>Ephemeral keys.</strong> The key doesn't have to live long. A node can make a fresh keypair only when it needs to sign something, and send the message with its <code>Tailnet-Key-Binding</code> in the same request. The first hop checks the binding against WhoIs, verifies the signature and knows the message came from that node. The key is then thrown away, so nothing needs storing, nothing can be stolen later, and no cache goes stale: the key lives exactly as long as the assertion's <code>exp</code>.</p>
+  <p>What you give up is "register once, then accept by pigeon from anyone". With a longer-lived key, a target that saw the binding first-hand on an earlier connection can later verify messages relayed by a proxy it doesn't trust. With an ephemeral key, someone has to check the binding against WhoIs <em>for this message</em>. That's either the target itself (a direct connection) or a witness the target trusts. A target that only ever hears from relays trusts its witness in both cases, so for that target, ephemeral keys cost nothing. The middle ground is the proxy-certificate chain again: an ephemeral key signed by a longer-lived key that targets already know first-hand.</p>
 </section>
 </main>
 
