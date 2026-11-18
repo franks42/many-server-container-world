@@ -34,6 +34,11 @@ Each node container runs two processes:
 
 ## Run
 
+**macOS quick start:** `scripts/setup-mac.sh` installs Colima, the Docker CLI,
+Compose and `jq` with Homebrew (no sudo), starts an arm64 VM, brings up the
+world and runs the tests. It skips the runtime setup if `docker info`
+already works, e.g. with OrbStack.
+
 Needs Docker with Compose v2, `jq` and `openssl`. On a Mac, use OrbStack,
 Colima or Docker Desktop; everything runs in their one Linux VM, with no
 nested virtualization.
