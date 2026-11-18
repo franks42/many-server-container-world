@@ -8,7 +8,7 @@ matches production Tailscale, so the faster offline loop can be trusted.
 **Status:** done (2026-11-17). On the real tailnet, 9/9 pass and the manual
 negative control passes. That needed an egress fix in tsproxy (README
 gotcha 8). Headscale is green again with the fix (9/9 plus policy reload).
-Left for Frank: revoke the three auth keys.
+Frank revoked the three auth keys the same day.
 
 ## Why this moved to Claude Code
 
