@@ -46,6 +46,8 @@ services:
       ROLE: web
       TS_HOSTNAME: web
       TS_AUTHKEY: ${TS_AUTHKEY_WEB:-}
+      TS_TAGS: tag:web
+      TS_CLIENT_SECRET: ${TS_CLIENT_SECRET_WEB:-}
     # Persistent node state => a restart keeps the same node key and name.
     # (With fresh state, the old ephemeral entry still holds "web" for 2m and
     # the restarted node registers as "web-1".)
@@ -58,6 +60,8 @@ services:
       ROLE: api
       TS_HOSTNAME: api
       TS_AUTHKEY: ${TS_AUTHKEY_API:-}
+      TS_TAGS: tag:api
+      TS_CLIENT_SECRET: ${TS_CLIENT_SECRET_API:-}
     # Persistent node state => a restart keeps the same node key and name.
     # (With fresh state, the old ephemeral entry still holds "api" for 2m and
     # the restarted node registers as "api-1".)
@@ -70,6 +74,8 @@ services:
       ROLE: db
       TS_HOSTNAME: db
       TS_AUTHKEY: ${TS_AUTHKEY_DB:-}
+      TS_TAGS: tag:db
+      TS_CLIENT_SECRET: ${TS_CLIENT_SECRET_DB:-}
     # Persistent node state => a restart keeps the same node key and name.
     # (With fresh state, the old ephemeral entry still holds "db" for 2m and
     # the restarted node registers as "db-1".)
@@ -84,6 +90,8 @@ services:
       TS_HOSTNAME: api
       TS_HOSTNAME_UNIQUE: "1"
       TS_AUTHKEY: ${TS_AUTHKEY_API:-}
+      TS_TAGS: tag:api
+      TS_CLIENT_SECRET: ${TS_CLIENT_SECRET_API:-}
     tmpfs: ["/var/lib/tsproxy"]   # replicas are disposable; names are unique anyway
     volumes: ["./certs/ca.crt:/certs/ca.crt:ro"]
     profiles: ["scale"]

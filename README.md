@@ -108,6 +108,15 @@ EOF
 docker compose up -d --build web api db && scripts/test.sh
 ```
 
+Instead of hand-made auth keys, you can use a Tailscale **OAuth client**: one
+per role, with the `auth_keys` scope and that role's tag. Set
+`TS_CLIENT_SECRET_WEB=tskey-client-...?ephemeral=true&preauthorized=true`
+(and the same for `_API` and `_DB`) in place of the `TS_AUTHKEY_*` lines.
+tsproxy then advertises the service's `TS_TAGS` (set in `compose.yaml`), and
+tsnet mints its own single-use key. A credential is only used for the first
+registration. A node with saved state reconnects without it. This path hasn't
+been tested yet.
+
 **Result (2026-11-17, Frank's tailnet):** 9/9 after the egress fix (gotcha 8),
 plus a manual negative control: adding a `tag:web → tag:db` grant made
 `web → db` return 200 as `tag:web`, and removing it brought back the deny. Same
@@ -162,6 +171,12 @@ Differences:
    it. The reason is unknown, so the real-tailnet policy has no `tests`.
 10. **Copying long lines from a terminal can insert hard line breaks.** That
     breaks JSON strings. To move policy text, use `pbcopy < file` instead.
+11. **Headscale rejects advertised tags on a tagged pre-auth key.**
+    Registering with a key that's already tagged *and* `AdvertiseTags` fails
+    with "requested tags [...] are invalid or not permitted". Nodes that
+    already have saved state skip registration, so only a fresh-state run
+    shows it. tsproxy advertises `TS_TAGS` only when it uses an OAuth client
+    secret.
 
 ## What's deliberately not here (yet)
 

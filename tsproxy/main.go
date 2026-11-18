@@ -43,18 +43,46 @@ func main() {
 		h, _ := os.Hostname()
 		hostname = hostname + "-" + h
 	}
-	if os.Getenv("TS_AUTHKEY") == "" {
-		log.Fatal("TS_AUTHKEY is empty (run scripts/up.sh, or set a real Tailscale key)")
+	// Tags this node asks for, e.g. TS_TAGS=tag:api. This is only a request:
+	// control grants a tag only if the credential allows it (key tags, OAuth
+	// client tags, tagOwners). Peers learn our tags from control, not from us.
+	var tags []string
+	for _, t := range strings.Split(os.Getenv("TS_TAGS"), ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			tags = append(tags, t)
+		}
+	}
+	// Credential for first registration (ignored once state exists):
+	//   TS_AUTHKEY        auth key (Headscale pre-auth key or tskey-auth-...)
+	//   TS_CLIENT_SECRET  Tailscale OAuth client secret (tskey-client-...);
+	//                     tsnet mints its own auth key for TS_TAGS. Options
+	//                     go on the secret: ...?ephemeral=true&preauthorized=true
+	// Workload identity federation (TS_CLIENT_ID) would need
+	// `import _ "tailscale.com/feature/identityfederation"`; not linked here.
+	switch {
+	case os.Getenv("TS_AUTHKEY") != "":
+		// An auth key carries its own tags. Don't also advertise TS_TAGS:
+		// Headscale rejects a tagged pre-auth key plus advertised tags
+		// ("requested tags ... are invalid or not permitted").
+		tags = nil
+	case os.Getenv("TS_CLIENT_SECRET") != "":
+		if len(tags) == 0 {
+			log.Fatal("TS_CLIENT_SECRET needs TS_TAGS (OAuth-minted keys must be tagged)")
+		}
+	default:
+		log.Fatal("no credential: set TS_AUTHKEY (run scripts/up.sh) or TS_CLIENT_SECRET + TS_TAGS")
 	}
 	appAddr := env("APP_ADDR", "127.0.0.1:8080")
 	egressAddr := env("EGRESS_ADDR", "127.0.0.1:9000")
 
 	s := &tsnet.Server{
-		Hostname:   hostname,
-		AuthKey:    os.Getenv("TS_AUTHKEY"),
-		ControlURL: os.Getenv("TS_CONTROL_URL"), // empty = real Tailscale
-		Dir:        env("TS_STATE_DIR", "/var/lib/tsproxy"),
-		Ephemeral:  env("TS_EPHEMERAL", "true") == "true",
+		Hostname:      hostname,
+		AuthKey:       os.Getenv("TS_AUTHKEY"),
+		ClientSecret:  os.Getenv("TS_CLIENT_SECRET"),
+		AdvertiseTags: tags,
+		ControlURL:    os.Getenv("TS_CONTROL_URL"), // empty = real Tailscale
+		Dir:           env("TS_STATE_DIR", "/var/lib/tsproxy"),
+		Ephemeral:     env("TS_EPHEMERAL", "true") == "true",
 	}
 	if os.Getenv("TS_VERBOSE") != "" {
 		s.Logf = log.Printf // full tailscaled-style backend logs
