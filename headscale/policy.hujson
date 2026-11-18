@@ -1,0 +1,14 @@
+// Tag-to-tag policy: a three-tier chain web -> api -> db.
+// Anything not explicitly accepted is denied (including replies-as-initiators,
+// e.g. db cannot open a connection to api).
+{
+  "tagOwners": {
+    "tag:web": ["world@"],
+    "tag:api": ["world@"],
+    "tag:db":  ["world@"],
+  },
+  "acls": [
+    {"action": "accept", "src": ["tag:web"], "dst": ["tag:api:80"]},
+    {"action": "accept", "src": ["tag:api"], "dst": ["tag:db:80"]},
+  ],
+}

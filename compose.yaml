@@ -1,0 +1,95 @@
+name: msw
+
+x-node: &node
+  build: .
+  image: msw-node:latest
+  depends_on:
+    headscale:
+      condition: service_healthy
+      required: false   # absent when running against real Tailscale
+  restart: unless-stopped
+  environment: &node-env
+    TS_CONTROL_URL: ${TS_CONTROL_URL-https://headscale:8443}
+    # Trust only the local test CA (control + DERP). Set MSW_CA_FILE= (empty)
+    # when pointing TS_CONTROL_URL at real Tailscale. (Deliberately not
+    # ${SSL_CERT_FILE}: a host-level value would silently leak in.)
+    SSL_CERT_FILE: ${MSW_CA_FILE-/certs/ca.crt}
+    # Don't ship node logs to log.tailscale.com from the test world.
+    TS_NO_LOGS_NO_SUPPORT: "true"
+    TS_STATE_DIR: /var/lib/tsproxy
+    TS_VERBOSE: ${TS_VERBOSE:-}
+  # tsnet is userspace: no cap_add, no /dev/net/tun, no privileged.
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  headscale:
+    image: headscale/headscale:${HEADSCALE_VERSION:-v0.29.7}
+    command: serve
+    volumes:
+      # Mount the directory, not single files: editors and `sed -i` replace the
+      # file (new inode), which a single-file bind mount would never see.
+      - ./headscale:/etc/headscale:ro
+      - ./certs:/certs:ro
+      - headscale-data:/var/lib/headscale
+    healthcheck:
+      test: ["CMD", "headscale", "health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    profiles: ["headscale"]
+
+  web:
+    <<: *node
+    environment:
+      <<: *node-env
+      ROLE: web
+      TS_HOSTNAME: web
+      TS_AUTHKEY: ${TS_AUTHKEY_WEB:-}
+    # Persistent node state => a restart keeps the same node key and name.
+    # (With fresh state, the old ephemeral entry still holds "web" for 2m and
+    # the restarted node registers as "web-1".)
+    volumes: ["ts-web:/var/lib/tsproxy", "./certs/ca.crt:/certs/ca.crt:ro"]
+
+  api:
+    <<: *node
+    environment:
+      <<: *node-env
+      ROLE: api
+      TS_HOSTNAME: api
+      TS_AUTHKEY: ${TS_AUTHKEY_API:-}
+    # Persistent node state => a restart keeps the same node key and name.
+    # (With fresh state, the old ephemeral entry still holds "api" for 2m and
+    # the restarted node registers as "api-1".)
+    volumes: ["ts-api:/var/lib/tsproxy", "./certs/ca.crt:/certs/ca.crt:ro"]
+
+  db:
+    <<: *node
+    environment:
+      <<: *node-env
+      ROLE: db
+      TS_HOSTNAME: db
+      TS_AUTHKEY: ${TS_AUTHKEY_DB:-}
+    # Persistent node state => a restart keeps the same node key and name.
+    # (With fresh state, the old ephemeral entry still holds "db" for 2m and
+    # the restarted node registers as "db-1".)
+    volumes: ["ts-db:/var/lib/tsproxy", "./certs/ca.crt:/certs/ca.crt:ro"]
+
+  # Many anonymous api replicas: `docker compose --profile scale up -d --scale api-pool=20`
+  api-pool:
+    <<: *node
+    environment:
+      <<: *node-env
+      ROLE: api-pool
+      TS_HOSTNAME: api
+      TS_HOSTNAME_UNIQUE: "1"
+      TS_AUTHKEY: ${TS_AUTHKEY_API:-}
+    tmpfs: ["/var/lib/tsproxy"]   # replicas are disposable; names are unique anyway
+    volumes: ["./certs/ca.crt:/certs/ca.crt:ro"]
+    profiles: ["scale"]
+
+volumes:
+  headscale-data:
+  ts-web:
+  ts-api:
+  ts-db:
