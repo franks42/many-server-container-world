@@ -1,0 +1,713 @@
+<title>Container Tailnet Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: one reading column; each figure is a wide, horizontally scrollable drawing with a caption. */
+:root {
+  --bg: #f4f6f9; --panel: #ffffff; --fg: #17202b; --muted: #5a6575; --line: #c3ccd8;
+  --ok: #0d7a68; --leak: #c2410c; --member: #9a6a00;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11151b; --panel: #1a2029; --fg: #e3e8ef; --muted: #9aa6b6; --line: #3a4656;
+  --ok: #3cc2a7; --leak: #f2814f; --member: #e2b443; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #11151b; --panel: #1a2029; --fg: #e3e8ef; --muted: #9aa6b6; --line: #3a4656;
+  --ok: #3cc2a7; --leak: #f2814f; --member: #e2b443; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+main { max-width: 1060px; margin: 0 auto; padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 36px; }
+header { display: flex; flex-direction: column; gap: 8px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+code { font-family: var(--mono); font-size: 0.9em; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+svg { display: block; width: 100%; height: auto; }
+.fig-wide svg { min-width: 760px; }
+figcaption { color: var(--muted); font-size: 14px; max-width: 75ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 22px; height: 0; border-top: 3px solid; display: inline-block; }
+
+/* SVG styling via page tokens */
+svg text { fill: var(--fg); font-family: var(--sans); font-size: 12px; }
+svg .b { font-weight: 600; font-size: 13px; }
+svg .m { fill: var(--muted); }
+svg .mono { font-family: var(--mono); font-size: 11px; }
+svg .h { font-weight: 700; font-size: 13px; letter-spacing: 0.02em; }
+svg .box { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+svg .zone { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 5 4; }
+svg .zone2 { fill: var(--bg); stroke: var(--line); stroke-width: 1.2; }
+svg .box.ok { stroke: var(--ok); stroke-width: 2; }
+svg .box.leak { stroke: var(--leak); stroke-width: 2; }
+svg .box.member { stroke: var(--member); stroke-width: 2; }
+svg .box.ghost { stroke-dasharray: 4 4; }
+svg .e { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+svg .e.ok { stroke: var(--ok); stroke-width: 2.2; }
+svg .e.leak { stroke: var(--leak); stroke-width: 2.2; }
+svg .e.member { stroke: var(--member); stroke-width: 2; stroke-dasharray: 6 4; }
+svg .e.none { stroke: var(--leak); stroke-width: 1.6; stroke-dasharray: 2 5; }
+svg .t-ok { fill: var(--ok); font-weight: 600; }
+svg .t-leak { fill: var(--leak); font-weight: 600; }
+svg .t-member { fill: var(--member); font-weight: 600; }
+svg .ah { fill: var(--muted); } svg .ah-ok { fill: var(--ok); } svg .ah-leak { fill: var(--leak); } svg .ah-member { fill: var(--member); }
+
+table { border-collapse: collapse; font-size: 14px; min-width: 560px; width: 100%; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+td.no { color: var(--leak); font-weight: 600; }
+pre { margin: 0; font-family: var(--mono); font-size: 13px; line-height: 1.5; overflow-x: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.callout { border-left: 3px solid var(--leak); padding: 4px 0 4px 14px; }
+</style>
+
+<main>
+<header>
+  <h1>Container Tailnet Map</h1>
+  <p class="lede">The many-server-container-world nodes on your real tailnet: where they run, what the policy lets them reach, and the path the failing <code>web → db</code> call took before the fix. Section 4 shows the same nodes on the local Headscale tailnet, section 5 is a statechart of how everything boots, section 6 shows how netmaps scale, and section 7 sketches role assumption.</p>
+</header>
+
+<section>
+  <h2>1. Where things run</h2>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 470" role="img" aria-label="Your Mac runs the Tailscale app as node fs-mbp14 and the Colima VM. Inside the VM, three containers each run a bb app on loopback and a tsproxy that is its own tailnet node.">
+      <rect class="zone2" x="10" y="10" width="740" height="450" rx="10"/>
+      <text class="h" x="26" y="34">Your Mac · macOS</text>
+
+      <rect class="box member" x="560" y="50" width="170" height="150" rx="8"/>
+      <text class="b" x="645" y="76" text-anchor="middle">Tailscale app</text>
+      <text x="645" y="98" text-anchor="middle">node fs-mbp14</text>
+      <text class="mono" x="645" y="116" text-anchor="middle">100.73.250.48</text>
+      <text x="645" y="138" text-anchor="middle">user device, so</text>
+      <text class="t-member" x="645" y="156" text-anchor="middle">autogroup:member</text>
+      <text class="m" x="645" y="184" text-anchor="middle">+ MagicDNS resolver</text>
+
+      <rect class="zone" x="30" y="50" width="510" height="390" rx="8"/>
+      <text class="h" x="46" y="74">Colima VM · Linux · Docker</text>
+      <text class="m" x="46" y="92">all traffic out of the VM goes through the Mac</text>
+
+      <!-- web -->
+      <rect class="box" x="45" y="110" width="150" height="315" rx="8"/>
+      <text class="b" x="120" y="132" text-anchor="middle">web container</text>
+      <rect class="box" x="57" y="145" width="126" height="60" rx="6"/>
+      <text x="120" y="170" text-anchor="middle">bb app</text>
+      <text class="mono m" x="120" y="190" text-anchor="middle">127.0.0.1:8080</text>
+      <line class="e" x1="120" y1="207" x2="120" y2="223"/>
+      <rect class="box ok" x="57" y="225" width="126" height="186" rx="6"/>
+      <text class="b" x="120" y="248" text-anchor="middle">tsproxy (tsnet)</text>
+      <text x="120" y="272" text-anchor="middle">node web</text>
+      <text class="t-ok" x="120" y="290" text-anchor="middle">tag:web</text>
+      <text class="mono" x="120" y="308" text-anchor="middle">100.102.250.6</text>
+      <text class="m" x="120" y="338" text-anchor="middle">in: tailnet :80</text>
+      <text class="m" x="120" y="356" text-anchor="middle">out: 127.0.0.1:9000</text>
+      <text class="m" x="120" y="384" text-anchor="middle">own WireGuard key</text>
+
+      <!-- api -->
+      <rect class="box" x="210" y="110" width="150" height="315" rx="8"/>
+      <text class="b" x="285" y="132" text-anchor="middle">api container</text>
+      <rect class="box" x="222" y="145" width="126" height="60" rx="6"/>
+      <text x="285" y="170" text-anchor="middle">bb app</text>
+      <text class="mono m" x="285" y="190" text-anchor="middle">127.0.0.1:8080</text>
+      <line class="e" x1="285" y1="207" x2="285" y2="223"/>
+      <rect class="box ok" x="222" y="225" width="126" height="186" rx="6"/>
+      <text class="b" x="285" y="248" text-anchor="middle">tsproxy (tsnet)</text>
+      <text x="285" y="272" text-anchor="middle">node api</text>
+      <text class="t-ok" x="285" y="290" text-anchor="middle">tag:api</text>
+      <text class="mono" x="285" y="308" text-anchor="middle">100.65.102.70</text>
+      <text class="m" x="285" y="338" text-anchor="middle">in: tailnet :80</text>
+      <text class="m" x="285" y="356" text-anchor="middle">out: 127.0.0.1:9000</text>
+      <text class="m" x="285" y="384" text-anchor="middle">own WireGuard key</text>
+
+      <!-- db -->
+      <rect class="box" x="375" y="110" width="150" height="315" rx="8"/>
+      <text class="b" x="450" y="132" text-anchor="middle">db container</text>
+      <rect class="box" x="387" y="145" width="126" height="60" rx="6"/>
+      <text x="450" y="170" text-anchor="middle">bb app</text>
+      <text class="mono m" x="450" y="190" text-anchor="middle">127.0.0.1:8080</text>
+      <line class="e" x1="450" y1="207" x2="450" y2="223"/>
+      <rect class="box ok" x="387" y="225" width="126" height="186" rx="6"/>
+      <text class="b" x="450" y="248" text-anchor="middle">tsproxy (tsnet)</text>
+      <text x="450" y="272" text-anchor="middle">node db</text>
+      <text class="t-ok" x="450" y="290" text-anchor="middle">tag:db</text>
+      <text class="mono" x="450" y="308" text-anchor="middle">100.102.157.101</text>
+      <text class="m" x="450" y="338" text-anchor="middle">in: tailnet :80</text>
+      <text class="m" x="450" y="356" text-anchor="middle">out: 127.0.0.1:9000</text>
+      <text class="m" x="450" y="384" text-anchor="middle">own WireGuard key</text>
+
+      <!-- control -->
+      <rect class="box" x="790" y="150" width="200" height="140" rx="8"/>
+      <text class="b" x="890" y="176" text-anchor="middle">Tailscale control</text>
+      <text class="mono m" x="890" y="196" text-anchor="middle">login.tailscale.com</text>
+      <text x="890" y="224" text-anchor="middle">holds the policy;</text>
+      <text x="890" y="242" text-anchor="middle">sends each of the 4 nodes</text>
+      <text x="890" y="260" text-anchor="middle">its own peer list</text>
+      <line class="e" x1="752" y1="220" x2="788" y2="220" stroke-dasharray="4 4"/>
+    </svg>
+    </div>
+    <figcaption>Four tailnet nodes share one machine: your Mac's Tailscale app (a user device) and three tsnet nodes inside containers (tagged devices). Each tsnet node has its own key, so it can only send as itself. The bb apps listen on loopback only and reach the tailnet through their tsproxy.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>2. What the policy allows</h2>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 800 340" role="img" aria-label="Policy graph: web may call api on port 80, api may call db on port 80, and your user device may reach all three. There is no rule between web and db.">
+      <defs>
+        <marker id="g-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="g-mem" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah-member" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <line class="e member" x1="220" y1="150" x2="318" y2="72" marker-end="url(#g-mem)"/>
+      <line class="e member" x1="220" y1="170" x2="598" y2="170" marker-end="url(#g-mem)"/>
+      <line class="e member" x1="220" y1="190" x2="318" y2="268" marker-end="url(#g-mem)"/>
+      <text class="t-member" x="214" y="104" text-anchor="end">member → *</text>
+      <text class="t-member" x="410" y="162" text-anchor="middle">member → * (all ports)</text>
+      <text class="t-member" x="214" y="248" text-anchor="end">member → *</text>
+
+      <line class="e ok" x1="490" y1="70" x2="598" y2="148" marker-end="url(#g-ok)"/>
+      <line class="e ok" x1="600" y1="192" x2="492" y2="268" marker-end="url(#g-ok)"/>
+      <text class="t-ok" x="552" y="100">web → api :80</text>
+      <text class="t-ok" x="552" y="250">api → db :80</text>
+
+      <line class="e none" x1="405" y1="98" x2="405" y2="242"/>
+      <text class="t-leak" x="396" y="212" text-anchor="end">no rule: web and db</text>
+      <text class="t-leak" x="396" y="228" text-anchor="end">are not peers</text>
+
+      <rect class="box member" x="20" y="132" width="200" height="76" rx="8"/>
+      <text class="b" x="120" y="158" text-anchor="middle">fs-mbp14</text>
+      <text x="120" y="178" text-anchor="middle">your Mac · user device</text>
+      <text class="mono" x="120" y="196" text-anchor="middle">autogroup:member</text>
+
+      <rect class="box ok" x="320" y="20" width="170" height="76" rx="8"/>
+      <text class="b" x="405" y="46" text-anchor="middle">web</text>
+      <text class="mono" x="405" y="66" text-anchor="middle">tag:web</text>
+      <text class="mono m" x="405" y="84" text-anchor="middle">100.102.250.6</text>
+
+      <rect class="box ok" x="600" y="132" width="170" height="76" rx="8"/>
+      <text class="b" x="685" y="158" text-anchor="middle">api</text>
+      <text class="mono" x="685" y="178" text-anchor="middle">tag:api</text>
+      <text class="mono m" x="685" y="196" text-anchor="middle">100.65.102.70</text>
+
+      <rect class="box ok" x="320" y="244" width="170" height="76" rx="8"/>
+      <text class="b" x="405" y="270" text-anchor="middle">db</text>
+      <text class="mono" x="405" y="290" text-anchor="middle">tag:db</text>
+      <text class="mono m" x="405" y="308" text-anchor="middle">100.102.157.101</text>
+    </svg>
+    </div>
+    <figcaption>Arrows point from who may start a connection to who may receive it. The amber <code>member → *</code> grant is what was left of the old allow-all. It covers your devices only, not tagged nodes. Control sends each node only the peers it shares a rule with, in either direction.</figcaption>
+  </figure>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Node</th><th>Peers it is told about</th><th>Not told about</th></tr></thead>
+    <tbody>
+      <tr><td><code>web</code></td><td><code>api</code>, your devices</td><td class="no"><code>db</code></td></tr>
+      <tr><td><code>api</code></td><td><code>web</code>, <code>db</code>, your devices</td><td>none</td></tr>
+      <tr><td><code>db</code></td><td><code>api</code>, your devices</td><td class="no"><code>web</code></td></tr>
+      <tr><td><code>fs-mbp14</code></td><td><code>web</code>, <code>api</code>, <code>db</code>, your devices</td><td>none</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>A peer it is told about can still be denied. <code>db → api</code> and <code>api → web</code> are peer pairs (the reverse rule makes them peers), so their packets travel inside the tailnet and the receiver's packet filter drops them. Those two were always correct. The pairs that are not peers at all, <code>web → db</code> and <code>db → web</code>, are the ones that leaked.</p>
+</section>
+
+<section>
+  <h2>3. Where <code>web → db</code> went wrong</h2>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 480" role="img" aria-label="Three calls compared. An allowed web to api call is encrypted as web and arrives as tag:web. Before the fix, web to db fell back to the host network, was encrypted by the Mac as fs-mbp14, and db allowed it. After the fix, tsproxy refuses because db is not a peer.">
+      <defs>
+        <marker id="f-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="f-leak" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-leak" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="f-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+
+      <!-- Lane 1: allowed -->
+      <text class="h" x="20" y="16">Allowed call: web → api</text>
+      <rect class="box" x="20" y="28" width="136" height="96" rx="6"/>
+      <text class="b" x="88" y="54" text-anchor="middle">web app</text>
+      <text class="mono" x="88" y="74" text-anchor="middle">GET /call/api</text>
+      <text class="m" x="88" y="92" text-anchor="middle">to its tsproxy</text>
+      <rect class="box" x="186" y="28" width="136" height="96" rx="6"/>
+      <text class="b" x="254" y="54" text-anchor="middle">web tsproxy</text>
+      <text x="254" y="74" text-anchor="middle">api is in its</text>
+      <text x="254" y="92" text-anchor="middle">peer list</text>
+      <rect class="box ok" x="352" y="28" width="136" height="96" rx="6"/>
+      <text class="b" x="420" y="54" text-anchor="middle">WireGuard</text>
+      <text x="420" y="74" text-anchor="middle">encrypted as</text>
+      <text class="t-ok" x="420" y="92" text-anchor="middle">web (tag:web)</text>
+      <rect class="box" x="518" y="28" width="136" height="96" rx="6"/>
+      <text class="b" x="586" y="54" text-anchor="middle">VM → Mac → LAN</text>
+      <text x="586" y="74" text-anchor="middle">UDP, opaque</text>
+      <text class="m" x="586" y="92" text-anchor="middle">transport only</text>
+      <rect class="box" x="684" y="28" width="136" height="96" rx="6"/>
+      <text class="b" x="752" y="54" text-anchor="middle">api tsproxy</text>
+      <text x="752" y="74" text-anchor="middle">filter: web → api</text>
+      <text x="752" y="92" text-anchor="middle">:80 allowed</text>
+      <rect class="box ok" x="850" y="28" width="136" height="96" rx="6"/>
+      <text class="b" x="918" y="54" text-anchor="middle">200</text>
+      <text x="918" y="74" text-anchor="middle">WhoIs: web</text>
+      <text class="t-ok" x="918" y="92" text-anchor="middle">tag:web</text>
+      <line class="e" x1="158" y1="76" x2="184" y2="76" marker-end="url(#f-n)"/>
+      <line class="e ok" x1="324" y1="76" x2="350" y2="76" marker-end="url(#f-ok)"/>
+      <line class="e ok" x1="490" y1="76" x2="516" y2="76" marker-end="url(#f-ok)"/>
+      <line class="e ok" x1="656" y1="76" x2="682" y2="76" marker-end="url(#f-ok)"/>
+      <line class="e ok" x1="822" y1="76" x2="848" y2="76" marker-end="url(#f-ok)"/>
+
+      <!-- Lane 2: leak -->
+      <text class="h" x="20" y="186">Before the fix: web → db</text>
+      <rect class="box" x="20" y="198" width="136" height="96" rx="6"/>
+      <text class="b" x="88" y="224" text-anchor="middle">web app</text>
+      <text class="mono" x="88" y="244" text-anchor="middle">GET /call/db</text>
+      <text class="m" x="88" y="262" text-anchor="middle">to its tsproxy</text>
+      <rect class="box" x="186" y="198" width="136" height="96" rx="6"/>
+      <text class="b" x="254" y="224" text-anchor="middle">web tsproxy</text>
+      <text x="254" y="244" text-anchor="middle">db is not in</text>
+      <text x="254" y="262" text-anchor="middle">its peer list</text>
+      <rect class="box leak" x="352" y="198" width="136" height="96" rx="6"/>
+      <text class="b" x="420" y="224" text-anchor="middle">tsnet Dial</text>
+      <text x="420" y="244" text-anchor="middle">falls back to the</text>
+      <text class="t-leak" x="420" y="262" text-anchor="middle">host network</text>
+      <text class="m" x="420" y="280" text-anchor="middle">plain HTTP</text>
+      <rect class="box leak" x="518" y="198" width="136" height="96" rx="6"/>
+      <text class="b" x="586" y="224" text-anchor="middle">VM → Mac</text>
+      <text x="586" y="244" text-anchor="middle">MagicDNS answers</text>
+      <text class="mono" x="586" y="262" text-anchor="middle">100.102.157.101</text>
+      <text class="m" x="586" y="280" text-anchor="middle">Mac routes 100.x</text>
+      <rect class="box leak" x="684" y="198" width="136" height="96" rx="6"/>
+      <text class="b" x="752" y="224" text-anchor="middle">Mac's Tailscale</text>
+      <text x="752" y="244" text-anchor="middle">encrypted as</text>
+      <text class="t-member" x="752" y="262" text-anchor="middle">fs-mbp14 (you)</text>
+      <rect class="box leak" x="850" y="198" width="136" height="96" rx="6"/>
+      <text class="b" x="918" y="224" text-anchor="middle">200 (wrong)</text>
+      <text x="918" y="244" text-anchor="middle">member → * allows</text>
+      <text x="918" y="262" text-anchor="middle">WhoIs: fs-mbp14</text>
+      <text class="m" x="918" y="280" text-anchor="middle">tags: none</text>
+      <line class="e" x1="158" y1="246" x2="184" y2="246" marker-end="url(#f-n)"/>
+      <line class="e leak" x1="324" y1="246" x2="350" y2="246" marker-end="url(#f-leak)"/>
+      <line class="e leak" x1="490" y1="246" x2="516" y2="246" marker-end="url(#f-leak)"/>
+      <line class="e leak" x1="656" y1="246" x2="682" y2="246" marker-end="url(#f-leak)"/>
+      <line class="e leak" x1="822" y1="246" x2="848" y2="246" marker-end="url(#f-leak)"/>
+
+      <!-- Lane 3: fixed -->
+      <text class="h" x="20" y="356">After the fix: web → db</text>
+      <rect class="box" x="20" y="368" width="136" height="96" rx="6"/>
+      <text class="b" x="88" y="394" text-anchor="middle">web app</text>
+      <text class="mono" x="88" y="414" text-anchor="middle">GET /call/db</text>
+      <text class="m" x="88" y="432" text-anchor="middle">to its tsproxy</text>
+      <rect class="box ok" x="186" y="368" width="136" height="96" rx="6"/>
+      <text class="b" x="254" y="394" text-anchor="middle">web tsproxy</text>
+      <text class="mono" x="254" y="414" text-anchor="middle">peerAddr(db)</text>
+      <text x="254" y="432" text-anchor="middle">not a peer:</text>
+      <text class="t-ok" x="254" y="450" text-anchor="middle">refuse</text>
+      <rect class="box ok" x="352" y="368" width="136" height="96" rx="6"/>
+      <text class="b" x="420" y="394" text-anchor="middle">502 at once</text>
+      <text x="420" y="414" text-anchor="middle">"not a tailnet</text>
+      <text x="420" y="432" text-anchor="middle">peer of this node"</text>
+      <line class="e" x1="158" y1="416" x2="184" y2="416" marker-end="url(#f-n)"/>
+      <line class="e ok" x1="324" y1="416" x2="350" y2="416" marker-end="url(#f-ok)"/>
+      <rect class="box ghost" x="518" y="368" width="468" height="96" rx="6"/>
+      <text class="m" x="752" y="410" text-anchor="middle">Nothing leaves the container. Egress dials only</text>
+      <text class="m" x="752" y="428" text-anchor="middle">a Tailscale IP taken from this node's own peer list.</text>
+    </svg>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="border-color: var(--ok)"></i>inside the tailnet, as the tagged node</span>
+      <span><i class="sw" style="border-color: var(--leak)"></i>the leak: outside tsnet, via the host</span>
+      <span><i class="sw" style="border-color: var(--member)"></i>your Mac's identity</span>
+    </div>
+    <figcaption>Both rows use the same physical wires (container, VM, Mac, LAN). The difference is <em>whose key encrypts the packet</em>. In the allowed call it's web's own tsnet key. In the leak, the packet left tsnet unencrypted and your Mac's Tailscale encrypted it as fs-mbp14, so db saw you, not tag:web.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>4. The offline version: Headscale</h2>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 560" role="img" aria-label="Offline setup: a headscale container inside the Colima VM is the control server and DERP relay for the web, api and db nodes. Your Mac's Tailscale app is on a different tailnet and cannot reach them.">
+      <defs>
+        <marker id="h-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <rect class="zone2" x="10" y="10" width="980" height="540" rx="10"/>
+      <text class="h" x="26" y="34">Your Mac · macOS</text>
+
+      <rect class="box member" x="800" y="50" width="170" height="170" rx="8"/>
+      <text class="b" x="885" y="76" text-anchor="middle">Tailscale app</text>
+      <text x="885" y="98" text-anchor="middle">fs-mbp14, on your</text>
+      <text x="885" y="116" text-anchor="middle">real tailnet only</text>
+      <text class="t-member" x="885" y="144" text-anchor="middle">not a member of</text>
+      <text class="t-member" x="885" y="162" text-anchor="middle">the world.test tailnet</text>
+      <text class="m" x="885" y="190" text-anchor="middle">routes 100.64.0.0/10</text>
+      <text class="m" x="885" y="206" text-anchor="middle">into utun5</text>
+
+      <rect class="box leak" x="800" y="250" width="170" height="150" rx="8"/>
+      <text class="b" x="885" y="276" text-anchor="middle">Old fallback here</text>
+      <text x="885" y="298" text-anchor="middle">OS resolver can't</text>
+      <text class="mono" x="885" y="316" text-anchor="middle">db.world.test</text>
+      <text class="t-leak" x="885" y="336" text-anchor="middle">fast error → 502</text>
+      <text class="m" x="885" y="362" text-anchor="middle">by IP: utun5 has no</text>
+      <text class="m" x="885" y="380" text-anchor="middle">such peer → dropped</text>
+
+      <rect class="zone" x="30" y="50" width="750" height="490" rx="8"/>
+      <text class="h" x="46" y="74">Colima VM · Linux · Docker</text>
+      <text class="m" x="46" y="92">one Compose project: 3 nodes + their control server</text>
+
+      <!-- web -->
+      <rect class="box" x="50" y="110" width="220" height="250" rx="8"/>
+      <text class="b" x="160" y="132" text-anchor="middle">web container</text>
+      <rect class="box" x="65" y="145" width="190" height="50" rx="6"/>
+      <text x="160" y="166" text-anchor="middle">bb app</text>
+      <text class="mono m" x="160" y="184" text-anchor="middle">127.0.0.1:8080</text>
+      <line class="e" x1="160" y1="195" x2="160" y2="205"/>
+      <rect class="box ok" x="65" y="205" width="190" height="140" rx="6"/>
+      <text class="b" x="160" y="226" text-anchor="middle">tsproxy (tsnet)</text>
+      <text x="160" y="248" text-anchor="middle">node web · <tspan class="t-ok">tag:web</tspan></text>
+      <text class="mono" x="160" y="268" text-anchor="middle">100.64.0.1</text>
+      <text class="mono m" x="160" y="288" text-anchor="middle">web.world.test</text>
+      <text class="m" x="160" y="316" text-anchor="middle">in :80 · out 127.0.0.1:9000</text>
+
+      <!-- api -->
+      <rect class="box" x="290" y="110" width="220" height="250" rx="8"/>
+      <text class="b" x="400" y="132" text-anchor="middle">api container</text>
+      <rect class="box" x="305" y="145" width="190" height="50" rx="6"/>
+      <text x="400" y="166" text-anchor="middle">bb app</text>
+      <text class="mono m" x="400" y="184" text-anchor="middle">127.0.0.1:8080</text>
+      <line class="e" x1="400" y1="195" x2="400" y2="205"/>
+      <rect class="box ok" x="305" y="205" width="190" height="140" rx="6"/>
+      <text class="b" x="400" y="226" text-anchor="middle">tsproxy (tsnet)</text>
+      <text x="400" y="248" text-anchor="middle">node api · <tspan class="t-ok">tag:api</tspan></text>
+      <text class="mono" x="400" y="268" text-anchor="middle">100.64.0.2</text>
+      <text class="mono m" x="400" y="288" text-anchor="middle">api.world.test</text>
+      <text class="m" x="400" y="316" text-anchor="middle">in :80 · out 127.0.0.1:9000</text>
+
+      <!-- db -->
+      <rect class="box" x="530" y="110" width="220" height="250" rx="8"/>
+      <text class="b" x="640" y="132" text-anchor="middle">db container</text>
+      <rect class="box" x="545" y="145" width="190" height="50" rx="6"/>
+      <text x="640" y="166" text-anchor="middle">bb app</text>
+      <text class="mono m" x="640" y="184" text-anchor="middle">127.0.0.1:8080</text>
+      <line class="e" x1="640" y1="195" x2="640" y2="205"/>
+      <rect class="box ok" x="545" y="205" width="190" height="140" rx="6"/>
+      <text class="b" x="640" y="226" text-anchor="middle">tsproxy (tsnet)</text>
+      <text x="640" y="248" text-anchor="middle">node db · <tspan class="t-ok">tag:db</tspan></text>
+      <text class="mono" x="640" y="268" text-anchor="middle">100.64.0.3</text>
+      <text class="mono m" x="640" y="288" text-anchor="middle">db.world.test</text>
+      <text class="m" x="640" y="316" text-anchor="middle">in :80 · out 127.0.0.1:9000</text>
+
+      <!-- control links -->
+      <line class="e" x1="160" y1="408" x2="160" y2="349" stroke-dasharray="5 4" marker-end="url(#h-n)"/>
+      <line class="e" x1="400" y1="408" x2="400" y2="349" stroke-dasharray="5 4" marker-end="url(#h-n)"/>
+      <line class="e" x1="640" y1="408" x2="640" y2="349" stroke-dasharray="5 4" marker-end="url(#h-n)"/>
+      <text class="m" x="410" y="384">keys, policy, peer lists; DERP relay</text>
+
+      <!-- headscale -->
+      <rect class="box" x="50" y="410" width="700" height="110" rx="8" style="stroke: var(--fg); stroke-width: 2"/>
+      <text class="b" x="70" y="436">headscale container</text>
+      <text x="70" y="458">control server at <tspan class="mono">https://headscale:8443</tspan></text>
+      <text x="70" y="478">policy: <tspan class="mono">headscale/policy.hujson</tspan>, reload with SIGHUP</text>
+      <text x="70" y="498">IPs <tspan class="mono">100.64.0.x</tspan> · MagicDNS <tspan class="mono">world.test</tspan></text>
+      <text x="450" y="458">embedded DERP relay + STUN :3478</text>
+      <text x="450" y="478">TLS from the test CA in <tspan class="mono">certs/</tspan></text>
+      <text x="450" y="498">auth keys made by <tspan class="mono">scripts/up.sh</tspan></text>
+    </svg>
+    </div>
+    <figcaption>The same three nodes, same images and same tsproxy, but <code>TS_CONTROL_URL</code> points at a Headscale container in the same Compose project instead of <code>login.tailscale.com</code>. Data still flows directly between the tsnet nodes over WireGuard. Headscale only coordinates and, if needed, relays. The whole tailnet lives inside the VM, and your Mac is not part of it.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Why the Headscale run never showed this</h2>
+  <p class="callout">The old code fell back to the host network on Headscale too. But there the fallback couldn't get anywhere. The container's resolver doesn't know <code>world.test</code>, so <code>db.world.test</code> failed to resolve and the call came back as 502. That looked exactly like a correct deny. Even by IP, your Mac routes <code>100.64.0.0/10</code> into its own Tailscale interface, which has no such peer and would drop the packet. Only on a tailnet that the host itself belongs to does the fallback reach anything.</p>
+</section>
+
+<section>
+  <h2>The fix in <code>tsproxy/main.go</code></h2>
+  <pre>DialContext: func(ctx, network, addr) {
+    host, port := net.SplitHostPort(addr)
+    ip, err := peerAddr(ctx, host)   // look host up in lc.Status().Peer
+    if err != nil { return err }     // "not a tailnet peer of this node"
+    return s.Dial(ctx, network, ip:port)  // always a Tailscale IP
+}</pre>
+  <p>Result on the real tailnet: 9 of 9 checks pass. Calls to nodes that aren't peers fail in milliseconds. Calls to peers that the policy denies still time out, because those are silent drops inside the tailnet.</p>
+</section>
+
+<section>
+  <h2>5. Bootstrap statecharts</h2>
+  <p>Two levels. First the host: from a bare Mac to a tested tailnet, either offline with Headscale or against the real tailnet. Then a single node container: what happens from start until it serves traffic, and how failures loop back through Compose's restart.</p>
+  <figure>
+    <div class="scroll">
+<pre class="mermaid">
+stateDiagram-v2
+  direction TB
+  [*] --> Preflight
+  Preflight : macOS + Homebrew check
+  Preflight --> DockerReady : docker info works
+  Preflight --> InstallColima : no Docker runtime
+  InstallColima : brew install colima, docker, compose, buildx
+  InstallColima --> DockerReady : colima start (vz, arm64)
+  DockerReady : Docker context colima
+  state Mode <<choice>>
+  DockerReady --> Mode
+  Mode --> UpSh : offline (Headscale)
+  Mode --> RealTailnet : real tailnet
+  state "scripts/up.sh" as UpSh {
+    state CheckCA <<choice>>
+    [*] --> CheckCA
+    CheckCA --> MakeCA : certs/ca.crt missing
+    CheckCA --> StartHS : CA exists
+    MakeCA : openssl test CA + headscale cert
+    MakeCA --> StartHS
+    StartHS : compose up --wait headscale
+    StartHS --> MakeUser : healthcheck passes
+    MakeUser : headscale users create world
+    MakeUser --> MakeKeys
+    MakeKeys : 3 pre-auth keys, one per tag (reusable, ephemeral, 24h)
+    MakeKeys --> WriteEnv
+    WriteEnv : write .env with TS_AUTHKEY_WEB / API / DB
+    WriteEnv --> StartNodes : compose up --build web api db
+    StartNodes --> WaitOnline : nodes start (see node chart)
+    WaitOnline : poll headscale nodes list every 1 s
+    WaitOnline --> WaitOnline : fewer than 3 online, up to 60 s
+    WaitOnline --> [*] : 3 online (+ SCALE replicas)
+  }
+  state "real tailnet (by hand)" as RealTailnet {
+    [*] --> AdminPolicy
+    AdminPolicy : tagOwners + grants in the admin console
+    AdminPolicy --> AdminKeys
+    AdminKeys : 3 tagged auth keys, or one OAuth client per role
+    AdminKeys --> HandEnv
+    HandEnv : .env with empty TS_CONTROL_URL, MSW_CA_FILE, COMPOSE_PROFILES
+    HandEnv --> StartReal : compose up --build web api db
+    StartReal --> [*]
+  }
+  UpSh --> Tests
+  RealTailnet --> Tests
+  Tests : test.sh (9 checks) + negative control
+  Tests --> [*]
+</pre>
+    </div>
+    <figcaption>Host bootstrap. <code>scripts/setup-mac.sh</code> covers Preflight through Tests on the offline path; <code>scripts/up.sh</code> is the boxed part. The real-tailnet path replaces Headscale, the CA and the generated keys with steps you do in the admin console.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="scroll">
+<pre class="mermaid">
+stateDiagram-v2
+  direction TB
+  [*] --> Container : compose starts the node
+  state "node container (node-entrypoint)" as Container {
+    state "bb app" as App {
+      [*] --> AppListen
+      AppListen : http-kit on loopback port 8080 only
+    }
+    --
+    state "tsproxy" as Proxy {
+      state Cred <<choice>>
+      [*] --> Cred
+      Cred --> UseKey : TS_AUTHKEY set
+      Cred --> UseOAuth : TS_CLIENT_SECRET + TS_TAGS
+      Cred --> Fatal : no credential, or secret without tags
+      UseKey : tags come from the key, none advertised
+      UseOAuth : AdvertiseTags from TS_TAGS
+      state Enroll <<choice>>
+      UseKey --> Enroll
+      UseOAuth --> Enroll
+      Enroll --> Enrolled : node state in TS_STATE_DIR
+      Enroll --> NeedsLogin : fresh state
+      NeedsLogin --> Registering : present key (OAuth mints one first)
+      Registering --> Fatal : rejected, or not Running within 60 s
+      Registering --> Running : control assigns IP, name, tags
+      Enrolled --> Running : reconnect, credential unused
+      Running --> Serving : listeners up
+      Serving : ingress tailnet port 80 to app, WhoIs headers
+      Serving --> Serving : egress 127.0.0.1 port 9000, peers only
+      Fatal : log.Fatal, process exits
+    }
+  }
+  Container --> Exited : either process exits
+  Exited : entrypoint kills the other, exit 1
+  Exited --> Container : compose restarts it (unless-stopped)
+</pre>
+    </div>
+    <figcaption>One node container. The bb app and tsproxy run side by side (the dashed divider marks the two concurrent regions). If either exits, the entrypoint stops the other, so a node is never half up, and Compose restarts the container. A credential matters only on first registration. With saved state, the node reconnects without using it.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>6. Netmaps: who gets told what</h2>
+  <p>Control pushes each node its own netmap: only the peers the policy connects it to, with their keys and tags. Netmap size follows how widely a node can be reached, not the total node count. The example is a hub-and-spoke policy with 1,000 clients.</p>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 520" role="img" aria-label="Control pushes per-node netmaps. Each client gets only the two api nodes. Each api node gets db-1 plus all 1000 clients. db-1 gets only the two api nodes.">
+      <defs>
+        <marker id="n-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="n-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <rect class="box" x="400" y="20" width="200" height="70" rx="8" style="stroke: var(--fg); stroke-width: 2"/>
+      <text class="b" x="500" y="48" text-anchor="middle">control (Headscale)</text>
+      <text class="m" x="500" y="68" text-anchor="middle">policy + key directory</text>
+
+      <line class="e" x1="460" y1="92" x2="160" y2="158" stroke-dasharray="5 4" marker-end="url(#n-n)"/>
+      <line class="e" x1="500" y1="92" x2="500" y2="158" stroke-dasharray="5 4" marker-end="url(#n-n)"/>
+      <line class="e" x1="540" y1="92" x2="840" y2="158" stroke-dasharray="5 4" marker-end="url(#n-n)"/>
+      <text class="m" x="300" y="112" text-anchor="middle">push netmap</text>
+      <text class="m" x="700" y="112" text-anchor="middle">push netmap</text>
+
+      <text class="h" x="150" y="178" text-anchor="middle">clients · tag:client</text>
+      <text class="h" x="500" y="178" text-anchor="middle">api · tag:api</text>
+      <text class="h" x="840" y="178" text-anchor="middle">db · tag:db</text>
+
+      <rect class="box" x="60" y="195" width="180" height="40" rx="6"/><text x="150" y="220" text-anchor="middle">client-1</text>
+      <rect class="box" x="60" y="245" width="180" height="40" rx="6"/><text x="150" y="270" text-anchor="middle">client-2</text>
+      <rect class="box" x="60" y="295" width="180" height="40" rx="6"/><text x="150" y="320" text-anchor="middle">client-3</text>
+      <rect class="box" x="60" y="345" width="180" height="40" rx="6"/><text x="150" y="370" text-anchor="middle">client-4</text>
+      <text class="m" x="150" y="406" text-anchor="middle">… client-1000</text>
+
+      <rect class="box ok" x="420" y="210" width="160" height="56" rx="6"/><text class="b" x="500" y="243" text-anchor="middle">api-1</text>
+      <rect class="box ok" x="420" y="300" width="160" height="56" rx="6"/><text class="b" x="500" y="333" text-anchor="middle">api-2</text>
+      <rect class="box" x="760" y="255" width="160" height="56" rx="6"/><text class="b" x="840" y="288" text-anchor="middle">db-1</text>
+
+      <line class="e ok" x1="242" y1="215" x2="418" y2="232" marker-end="url(#n-ok)"/>
+      <line class="e ok" x1="242" y1="265" x2="418" y2="322" marker-end="url(#n-ok)"/>
+      <line class="e ok" x1="242" y1="315" x2="418" y2="244" marker-end="url(#n-ok)"/>
+      <line class="e ok" x1="242" y1="365" x2="418" y2="336" marker-end="url(#n-ok)"/>
+      <line class="e ok" x1="582" y1="238" x2="758" y2="276" marker-end="url(#n-ok)"/>
+      <line class="e ok" x1="582" y1="328" x2="758" y2="292" marker-end="url(#n-ok)"/>
+      <text class="t-ok" x="330" y="200" text-anchor="middle">calls :443</text>
+      <text class="t-ok" x="670" y="240" text-anchor="middle">calls :5432</text>
+
+      <rect class="box" x="40" y="430" width="220" height="74" rx="8"/>
+      <text class="b" x="150" y="454" text-anchor="middle">each client's netmap</text>
+      <text class="mono" x="150" y="474" text-anchor="middle">api-1, api-2</text>
+      <text class="t-ok" x="150" y="494" text-anchor="middle">2 peers</text>
+
+      <rect class="box leak" x="390" y="430" width="220" height="74" rx="8"/>
+      <text class="b" x="500" y="454" text-anchor="middle">each api node's netmap</text>
+      <text class="mono" x="500" y="474" text-anchor="middle">db-1 + client-1…1000</text>
+      <text class="t-leak" x="500" y="494" text-anchor="middle">1,001 peers</text>
+
+      <rect class="box" x="730" y="430" width="220" height="74" rx="8"/>
+      <text class="b" x="840" y="454" text-anchor="middle">db-1's netmap</text>
+      <text class="mono" x="840" y="474" text-anchor="middle">api-1, api-2</text>
+      <text class="t-ok" x="840" y="494" text-anchor="middle">2 peers</text>
+    </svg>
+    </div>
+    <figcaption>Leaf nodes stay small: a client never learns about other clients or about db. The hub carries the weight, because to accept a connection a node must already hold the caller's key. Broad rules like <code>member → *</code> make every node a hub.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 800 270" role="img" aria-label="When client-1001 joins, control pushes a delta only to api-1 and api-2. The other clients and db-1 get nothing.">
+      <defs>
+        <marker id="c-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-member" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+      <rect class="box member" x="40" y="14" width="180" height="44" rx="6"/>
+      <text class="b" x="130" y="41" text-anchor="middle">client-1001 boots</text>
+      <line class="e member" x1="130" y1="60" x2="130" y2="104" marker-end="url(#c-m)"/>
+      <text class="t-member" x="140" y="87">registers</text>
+
+      <rect class="box" x="40" y="106" width="180" height="70" rx="8" style="stroke: var(--fg); stroke-width: 2"/>
+      <text class="b" x="130" y="134" text-anchor="middle">control</text>
+      <text class="m" x="130" y="154" text-anchor="middle">who can see client-1001?</text>
+
+      <line class="e member" x1="222" y1="125" x2="438" y2="42" marker-end="url(#c-m)"/>
+      <line class="e member" x1="222" y1="135" x2="438" y2="102" marker-end="url(#c-m)"/>
+      <text class="t-member" x="330" y="64" text-anchor="middle">delta: + client-1001</text>
+
+      <rect class="box ok" x="440" y="20" width="160" height="44" rx="6"/><text class="b" x="520" y="47" text-anchor="middle">api-1</text>
+      <rect class="box ok" x="440" y="80" width="160" height="44" rx="6"/><text class="b" x="520" y="107" text-anchor="middle">api-2</text>
+      <rect class="box ghost" x="440" y="150" width="320" height="44" rx="6"/>
+      <text class="m" x="600" y="177" text-anchor="middle">client-1 … client-1000: nothing sent</text>
+      <rect class="box ghost" x="440" y="210" width="320" height="44" rx="6"/>
+      <text class="m" x="600" y="237" text-anchor="middle">db-1: nothing sent</text>
+    </svg>
+    </div>
+    <figcaption>The cost of a change is how many nodes can see the changed node. Here a new client costs 2 pushes, not 1,001. With ephemeral replicas joining and leaving all the time, that fan-out times the churn rate is what loads the control server.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>7. Assuming a role on the tailnet</h2>
+  <p>Tailscale has no "assume role" step: tags are always on. You can still build one, because a role can be its own tailnet node. Your host keeps a low-privilege identity running all the time, and starts a second, ephemeral identity when it needs the stronger role.</p>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 440" role="img" aria-label="Role assumption: a client host runs a staff tsproxy permanently and starts an ephemeral admin tsproxy on demand. The api service sees tag:staff or tag:admin and applies the matching grant.">
+      <defs>
+        <marker id="r-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="r-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-member" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="r-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+
+      <rect class="zone2" x="20" y="20" width="420" height="400" rx="10"/>
+      <text class="h" x="36" y="44">Your host</text>
+
+      <rect class="box" x="40" y="60" width="170" height="90" rx="8"/>
+      <text class="b" x="125" y="84" text-anchor="middle">your app / CLI</text>
+      <text x="125" y="106" text-anchor="middle">normal work → staff</text>
+      <text x="125" y="126" text-anchor="middle">admin task → admin</text>
+
+      <rect class="box ok" x="250" y="60" width="170" height="100" rx="8"/>
+      <text class="b" x="335" y="84" text-anchor="middle">tsproxy · staff</text>
+      <text class="t-ok" x="335" y="104" text-anchor="middle">tag:staff</text>
+      <text x="335" y="124" text-anchor="middle">always running</text>
+      <text class="mono m" x="335" y="144" text-anchor="middle">egress :9000</text>
+
+      <rect class="box" x="40" y="210" width="170" height="120" rx="8"/>
+      <text class="b" x="125" y="234" text-anchor="middle">assume admin</text>
+      <text x="125" y="256" text-anchor="middle">start the admin node</text>
+      <text x="125" y="276" text-anchor="middle">with the tag:admin</text>
+      <text x="125" y="294" text-anchor="middle">OAuth client secret</text>
+      <text class="m" x="125" y="316" text-anchor="middle">who holds it may assume</text>
+
+      <rect class="box member ghost" x="250" y="210" width="170" height="120" rx="8"/>
+      <text class="b" x="335" y="234" text-anchor="middle">tsproxy · admin</text>
+      <text class="t-member" x="335" y="254" text-anchor="middle">tag:admin</text>
+      <text x="335" y="276" text-anchor="middle">ephemeral,</text>
+      <text x="335" y="294" text-anchor="middle">only while needed</text>
+      <text class="mono m" x="335" y="316" text-anchor="middle">egress :9001</text>
+
+      <line class="e" x1="212" y1="100" x2="248" y2="100" marker-end="url(#r-n)"/>
+      <line class="e" x1="190" y1="152" x2="250" y2="214" marker-end="url(#r-n)"/>
+      <line class="e" x1="212" y1="290" x2="248" y2="290" marker-end="url(#r-n)"/>
+
+      <text class="m" x="40" y="366">Drop the role: stop the admin node.</text>
+      <text class="m" x="40" y="386">Its ephemeral entry disappears from the tailnet,</text>
+      <text class="m" x="40" y="406">and with it every admin permission.</text>
+
+      <rect class="box" x="840" y="20" width="140" height="74" rx="8" style="stroke: var(--fg); stroke-width: 2"/>
+      <text class="b" x="910" y="46" text-anchor="middle">control</text>
+      <text class="m" x="910" y="66" text-anchor="middle">binds a tag to a</text>
+      <text class="m" x="910" y="82" text-anchor="middle">key at registration</text>
+
+      <rect class="box" x="640" y="120" width="180" height="140" rx="8"/>
+      <text class="b" x="730" y="146" text-anchor="middle">api service</text>
+      <text x="730" y="170" text-anchor="middle">tsproxy WhoIs →</text>
+      <text class="mono" x="730" y="190" text-anchor="middle">X-Tailnet-Tags</text>
+      <text x="730" y="216" text-anchor="middle">app allows the ops</text>
+      <text x="730" y="236" text-anchor="middle">of the caller's tag</text>
+
+      <line class="e ok" x1="422" y1="110" x2="638" y2="165" marker-end="url(#r-ok)"/>
+      <text class="t-ok" x="530" y="118" text-anchor="middle">seen as tag:staff</text>
+      <line class="e member" x1="422" y1="260" x2="638" y2="225" marker-end="url(#r-m)"/>
+      <text class="t-member" x="530" y="268" text-anchor="middle">seen as tag:admin</text>
+
+      <rect class="box" x="560" y="300" width="420" height="110" rx="8"/>
+      <text class="b" x="580" y="326">policy (grants with app capabilities)</text>
+      <text class="mono" x="580" y="352">tag:staff → tag:api   ops: read</text>
+      <text class="mono" x="580" y="374">tag:admin → tag:api   ops: read, write, migrate</text>
+      <text class="mono m" x="580" y="396">who may assume = who gets the tag:admin credential</text>
+    </svg>
+    </div>
+    <figcaption>"Assuming admin" means sending a request through the admin identity. The api service sees only <code>tag:admin</code> and applies the admin grant. Access ends when the ephemeral node goes away. Unlike AWS's AssumeRole, the target doesn't learn <em>who</em> assumed the role. If you need that for auditing, the admin tsproxy would have to forward its own verified caller identity.</figcaption>
+  </figure>
+</section>
+</main>
