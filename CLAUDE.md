@@ -54,6 +54,11 @@ docker compose --profile headscale exec headscale headscale nodes list
 - Frank's Mac (arm64, Colima): 9/9 plus the policy-reload check pass
   (reload takes about 2 s). The first `web -> api` call needs 2 tries
   (first-packet path discovery); that's expected.
+- Frank's real tailnet (same Mac): 9/9 plus a manual negative control pass,
+  but only after the tsproxy egress fix (README gotcha 8). The run is done
+  and the ephemeral nodes are gone. Frank's tailnet policy still has
+  `tagOwners` for `tag:web`, `tag:api` and `tag:db`, the two test grants, and
+  the old allow-all narrowed to `autogroup:member → *`.
 
 ## Rules for working here
 
@@ -64,8 +69,14 @@ docker compose --profile headscale exec headscale headscale nodes list
   without first showing the exact diff and getting his OK. Auth keys go only
   in `.env`, never in git, the chat, or logs you print.
 - Commit and push only when Frank asks.
+- tsproxy egress must dial only Tailscale IPs from its own peer list
+  (`peerAddr` in `tsproxy/main.go`). Never call `tsnet.Server.Dial` with a
+  name or address that hasn't been checked: tsnet falls back to the host
+  network, and on a host that is itself on the tailnet the call goes out with
+  the host's identity.
 
 ## Current task
 
-See `docs/HANDOFF-real-tailscale.md`: run the same nodes against Frank's real
-tailnet as a fidelity check of Headscale's behavior.
+None in progress. The real-tailnet fidelity check
+(`docs/HANDOFF-real-tailscale.md`) finished on 2026-11-17. Candidates for
+what comes next are under "Later ideas" in that file.

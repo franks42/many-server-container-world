@@ -108,6 +108,19 @@ EOF
 docker compose up -d --build web api db && scripts/test.sh
 ```
 
+**Result (2026-11-17, Frank's tailnet):** 9/9 after the egress fix (gotcha 8),
+plus a manual negative control: adding a `tag:web → tag:db` grant made
+`web → db` return 200 as `tag:web`, and removing it brought back the deny. Same
+as Headscale:
+- `X-Tailnet-User` is `tagged-devices` for tagged nodes.
+- Node names are clean (`web`, `api`, `db`).
+- Connections are direct.
+
+Differences:
+- Nodes joined in about 3 s.
+- The first `web → api` call succeeded on the first try.
+- Policy changes reached nodes within seconds.
+
 ## Gotchas found while building this (each one cost a debugging round)
 
 1. **No reachable DERP means about a minute before the first packet.** Peers
@@ -133,7 +146,22 @@ docker compose up -d --build web api db && scripts/test.sh
 7. **A deny looks like a timeout.** Tailscale drops denied packets, so a deny
    shows up as a dial timeout (5 s in tsproxy), not "connection refused". That's
    why the negative-control test exists: without it, a broken tailnet would pass
-   every deny check.
+   every deny check. Since the fix in gotcha 8, a target that isn't a peer at all
+   (no rule in either direction) is refused at once instead.
+8. **tsnet's `Dial` falls back to the host network.** Control only tells a node
+   about peers it shares a rule with. For any other target, `tsnet.Server.Dial`
+   quietly uses the host's network stack. If the host is itself on the tailnet,
+   as Frank's Mac is, the call goes out through the host's Tailscale and arrives
+   as the *host's* identity. Here that let `web → db` through as `fs-mbp14`. On
+   Headscale the fallback failed fast instead (the OS resolver can't resolve
+   `*.world.test`), so it looked like a correct deny. tsproxy now resolves the
+   target against its own peer list (`LocalClient.Status`) and dials only that peer's Tailscale IP.
+9. **The Tailscale admin console rejected a `tests` block.** A valid HuJSON
+   `"tests": [...]` (tag sources, `accept`/`deny` with `tag:x:80`) was rejected
+   with `invalid literal` at the first `"deny"`. The policy saved fine without
+   it. The reason is unknown, so the real-tailnet policy has no `tests`.
+10. **Copying long lines from a terminal can insert hard line breaks.** That
+    breaks JSON strings. To move policy text, use `pbcopy < file` instead.
 
 ## What's deliberately not here (yet)
 

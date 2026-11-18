@@ -12,10 +12,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -116,13 +118,56 @@ func main() {
 	go func() { log.Fatal(http.Serve(ln, ingress)) }()
 
 	// ---- egress --------------------------------------------------------
+	// Egress must stay on the tailnet. tsnet's Dial falls back to the host
+	// network for destinations it has no peer for, and the control server
+	// only sends peers this node has an ACL relationship with. Without the
+	// check below, a call to a non-peer leaves via the host, and if the host
+	// is itself on the tailnet, it arrives with the *host's* identity.
+	// So: resolve the target against this node's own peer list and dial
+	// only that peer's Tailscale IP; anything else is refused.
+	peerAddr := func(ctx context.Context, host string) (netip.Addr, error) {
+		st, err := lc.Status(ctx)
+		if err != nil {
+			return netip.Addr{}, err
+		}
+		ip, ipErr := netip.ParseAddr(host)
+		for _, p := range st.Peer {
+			fqdn := strings.TrimSuffix(p.DNSName, ".")
+			short, _, _ := strings.Cut(fqdn, ".")
+			match := strings.EqualFold(fqdn, host) || strings.EqualFold(short, host)
+			for _, a := range p.TailscaleIPs {
+				match = match || (ipErr == nil && a == ip)
+			}
+			if !match {
+				continue
+			}
+			for _, a := range p.TailscaleIPs {
+				if a.Is4() {
+					return a, nil
+				}
+			}
+			if len(p.TailscaleIPs) > 0 {
+				return p.TailscaleIPs[0], nil
+			}
+		}
+		return netip.Addr{}, fmt.Errorf("%s is not a tailnet peer of this node (no ACL relationship)", host)
+	}
+
 	dialTimeout := 5 * time.Second // an ACL deny is a silent drop, so deny == timeout
 	egress := &httputil.ReverseProxy{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 				defer cancel()
-				return s.Dial(ctx, network, addr)
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					return nil, err
+				}
+				ip, err := peerAddr(ctx, host)
+				if err != nil {
+					return nil, err
+				}
+				return s.Dial(ctx, network, net.JoinHostPort(ip.String(), port))
 			},
 			ResponseHeaderTimeout: 10 * time.Second,
 		},
