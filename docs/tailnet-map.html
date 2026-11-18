@@ -711,3 +711,17 @@ stateDiagram-v2
   </figure>
 </section>
 </main>
+
+<!-- Renders the section 5 statecharts when the file is opened locally.
+     The claude.ai viewer renders them natively; already-rendered blocks
+     carry data-processed and are skipped. -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  (function () {
+    if (!window.mermaid) return;
+    var t = document.documentElement.getAttribute("data-theme");
+    var dark = t ? t === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    window.mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
+    window.mermaid.run({ querySelector: "pre.mermaid:not([data-processed])" });
+  })();
+</script>
