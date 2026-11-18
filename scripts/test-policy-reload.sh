@@ -17,7 +17,9 @@ code() { docker compose exec -T web curl -s -m 12 -o /dev/null -w '%{http_code}'
 before=$(code); echo "before: web->db $before (want != 200)"
 
 # Insert a rule allowing tag:web -> tag:db:80 right after the "acls" opener.
-sed -i 's#"acls": \[#"acls": [\n    {"action": "accept", "src": ["tag:web"], "dst": ["tag:db:80"]},  // TEMP#' "$policy"
+# perl, not sed: BSD sed (macOS) and GNU sed disagree on -i and on \n.
+perl -0pi -e 's/"acls": \[/"acls": [\n    {"action": "accept", "src": ["tag:web"], "dst": ["tag:db:80"]},  \/\/ TEMP/' "$policy"
+grep -q TEMP "$policy" || { echo "FAIL: could not edit $policy"; exit 1; }
 docker compose kill -s SIGHUP headscale >/dev/null
 
 after=000
