@@ -141,3 +141,12 @@ nodes disappear on their own once offline.
 - Role proxy with audit (`docs/tailnet-map.html` section 8): an
   `admin-proxy` service, `X-Tailnet-On-Behalf-Of`, and a
   `TRUSTED_FORWARDERS` tag list on the receiving tsproxy.
+- Self-asserted key bindings (`docs/tailnet-map.html` sections 9 and 10):
+  tsproxy makes a keypair and sends a self-signed `{id, key, t}` binding on
+  first contact. The receiving tsproxy accepts it only if the WhoIs identity
+  of the connection matches `id`, then caches key → identity with a TTL.
+  Delegation assertions signed with that key (`sub`, `act`, `aud`, `exp`)
+  can then travel through `staff-proxy`. Test the HR case: staff see only
+  their own record, and a compromised proxy can't switch `sub`. Also try a
+  relayed binding (SDSI-style, vouched for by a party that saw it
+  first-hand), and compare with tsidp token exchange (`TSIDP_ENABLE_STS=1`).

@@ -72,7 +72,7 @@ pre { margin: 0; font-family: var(--mono); font-size: 13px; line-height: 1.5; ov
 <main>
 <header>
   <h1>Container Tailnet Map</h1>
-  <p class="lede">The many-server-container-world nodes on your real tailnet: where they run, what the policy lets them reach, and the path the failing <code>web → db</code> call took before the fix. Section 4 shows the same nodes on the local Headscale tailnet, section 5 is a statechart of how everything boots, section 6 shows how netmaps scale, section 7 sketches role assumption, and section 8 a shared role proxy with audit.</p>
+  <p class="lede">The many-server-container-world nodes on your real tailnet: where they run, what the policy lets them reach, and the path the failing <code>web → db</code> call took before the fix. Section 4 shows the same nodes on the local Headscale tailnet, section 5 is a statechart of how everything boots, section 6 shows how netmaps scale, section 7 sketches role assumption, section 8 a shared role proxy with audit, section 9 signed delegation, and section 10 self-asserted key bindings.</p>
 </header>
 
 <section>
@@ -783,6 +783,167 @@ stateDiagram-v2
     </svg>
     </div>
     <figcaption>Three rules carry the whole design. A group grant decides who may assume the role. A tag grant decides what the role may do. A forwarder list on the receiving side decides who may vouch for an original caller. With several hops, each trusted forwarder appends to <code>On-Behalf-Of</code> rather than replacing it, like the <code>act</code> chain in OAuth token exchange. None of this exists in tsproxy yet; it's a design sketch.</figcaption>
+  </figure>
+</section>
+<section>
+  <h2>9. Delegation: who vouches for "on behalf of"?</h2>
+  <p>In section 8 the proxy itself asserts who it acts for, so the claim is only as honest as the proxy. With a <em>signed delegation</em>, the requester signs a short-lived assertion naming the proxy as its actor, and the backend evaluates policy on both identities. HR records show why both are needed: staff may read only their own record, and hr-admin may read all of them. In both lanes below <code>staff-proxy</code> is compromised.</p>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 590" role="img" aria-label="Lane A, header only: a compromised staff-proxy rewrites On-Behalf-Of from alice to bob, and hr-api, trusting the forwarder, returns Bob's HR record. Lane B, signed delegation: alice signs an assertion with sub alice, act staff-proxy, aud hr-api. The compromised proxy can only forward it, so hr-api verifies it and returns Alice's record only.">
+      <defs>
+        <marker id="q-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-member" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="q-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="q-l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-leak" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+
+      <text class="h" x="20" y="28">A. HEADER ONLY (SECTION 8): THE PROXY VOUCHES</text>
+
+      <rect class="box member" x="20" y="60" width="170" height="110" rx="8"/>
+      <text class="b" x="105" y="88" text-anchor="middle">alice's laptop</text>
+      <text class="mono" x="105" y="110" text-anchor="middle">alice@…</text>
+      <text class="t-member" x="105" y="132" text-anchor="middle">in group:staff</text>
+      <text class="m" x="105" y="154" text-anchor="middle">GET /hr/me</text>
+
+      <line class="e member" x1="192" y1="115" x2="288" y2="115" marker-end="url(#q-m)"/>
+      <text class="t-member" x="240" y="104" text-anchor="middle">as alice@</text>
+
+      <rect class="box leak" x="290" y="45" width="230" height="140" rx="8"/>
+      <text class="b" x="405" y="71" text-anchor="middle">staff-proxy</text>
+      <text class="mono" x="405" y="91" text-anchor="middle">tag:staff-proxy</text>
+      <text class="t-leak" x="405" y="113" text-anchor="middle">compromised</text>
+      <text x="405" y="139" text-anchor="middle">rewrites the header:</text>
+      <text class="mono" x="405" y="161" text-anchor="middle">On-Behalf-Of: bob@…</text>
+
+      <line class="e leak" x1="522" y1="115" x2="618" y2="115" marker-end="url(#q-l)"/>
+      <text class="mono" x="570" y="90" text-anchor="middle">tag:staff-</text>
+      <text class="mono" x="570" y="104" text-anchor="middle">proxy + OBO</text>
+
+      <rect class="box leak" x="620" y="45" width="360" height="140" rx="8"/>
+      <text class="b" x="640" y="71">hr-api (tsproxy + app)</text>
+      <text x="640" y="97">caller tag:staff-proxy is a trusted forwarder</text>
+      <text x="640" y="119">→ believes On-Behalf-Of: bob@…</text>
+      <text x="640" y="141">policy: owner == bob</text>
+      <text class="t-leak" x="640" y="167">returns Bob's record</text>
+
+      <text class="h" x="20" y="238">B. SIGNED DELEGATION: THE REQUESTER VOUCHES</text>
+
+      <rect class="box member" x="20" y="255" width="170" height="155" rx="8"/>
+      <text class="b" x="105" y="281" text-anchor="middle">alice's laptop</text>
+      <text class="mono" x="105" y="301" text-anchor="middle">alice@…</text>
+      <text x="105" y="325" text-anchor="middle">signs an assertion:</text>
+      <text class="mono" x="40" y="345">sub: alice</text>
+      <text class="mono" x="40" y="361">act: staff-proxy</text>
+      <text class="mono" x="40" y="377">aud: hr-api</text>
+      <text class="mono" x="40" y="393">exp: now + 60 s</text>
+
+      <line class="e member" x1="192" y1="332" x2="288" y2="332" marker-end="url(#q-m)"/>
+      <text class="t-member" x="240" y="310" text-anchor="middle">as alice@</text>
+      <text class="t-member" x="240" y="324" text-anchor="middle">+ token</text>
+
+      <rect class="box leak" x="290" y="255" width="230" height="155" rx="8"/>
+      <text class="b" x="405" y="281" text-anchor="middle">staff-proxy</text>
+      <text class="mono" x="405" y="301" text-anchor="middle">tag:staff-proxy</text>
+      <text class="t-leak" x="405" y="323" text-anchor="middle">compromised</text>
+      <text x="405" y="349" text-anchor="middle">can only forward the token;</text>
+      <text x="405" y="369" text-anchor="middle">it holds no signature</text>
+      <text x="405" y="389" text-anchor="middle">from bob</text>
+
+      <line class="e ok" x1="522" y1="332" x2="618" y2="332" marker-end="url(#q-ok)"/>
+      <text class="mono" x="570" y="307" text-anchor="middle">tag:staff-</text>
+      <text class="mono" x="570" y="321" text-anchor="middle">proxy + token</text>
+
+      <rect class="box ok" x="620" y="255" width="360" height="155" rx="8"/>
+      <text class="b" x="640" y="281">hr-api (tsproxy + app)</text>
+      <text x="640" y="305">1. signature valid (alice's key)</text>
+      <text x="640" y="325">2. act == WhoIs caller (tag:staff-proxy)</text>
+      <text x="640" y="345">3. aud == hr-api, not expired</text>
+      <text x="640" y="365">4. policy(actor, sub): owner == alice</text>
+      <text class="t-ok" x="640" y="393">returns Alice's record only</text>
+
+      <rect class="box" x="20" y="445" width="960" height="130" rx="8"/>
+      <text class="b" x="40" y="469">policy at hr-api: neither identity is enough on its own</text>
+      <text class="mono" x="40" y="495">actor tag:staff-proxy     + sub any member   → read where owner == sub</text>
+      <text class="mono m" x="700" y="495">staff: own record</text>
+      <text class="mono" x="40" y="515">actor tag:hr-admin-proxy  + sub in group:hr  → read all</text>
+      <text class="mono m" x="700" y="515">hr-admin: every record</text>
+      <text class="mono" x="40" y="535">anything else                                → deny</text>
+      <text class="mono" x="40" y="559">tailnet grant: only the two proxies reach tag:hr-api:80</text>
+      <text class="mono m" x="700" y="559">outer layer, unchanged</text>
+    </svg>
+    </div>
+    <figcaption>The actor decides which operations are allowed; the subject decides which records. In lane A a compromised proxy reads anyone's record by editing one header. In lane B it can act only for people who actually sent it a token, and only within that token's audience and lifetime. This is the <code>sub</code> plus <code>act</code> shape of OAuth token exchange (RFC 8693) and of proxy certificates (RFC 3820); a chain of hops nests <code>act</code> claims. The tailnet can't supply the signature: a node's WireGuard key lives inside tailscaled, and WhoIs authenticates the connection, not a statement. So the signing key has to come from the user's IdP (token exchange at the proxy) or from a small PKI next to the tailnet. This is a design sketch; none of it is in tsproxy.</figcaption>
+  </figure>
+</section>
+<section>
+  <h2>10. Self-asserted key bindings, checked against the connection</h2>
+  <p>An SDSI-style answer to section 9 with no CA and no authority. A node makes its own keypair and asserts "key K is me". Any party it connects to checks that assertion against the one fact it can't fake: the WhoIs identity of that WireGuard connection. From then on, that party attributes anything signed with K to the node, however the message arrives.</p>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 540" role="img" aria-label="Step 1: alice sends a self-signed binding of key K to her identity over a direct WireGuard connection; hr-api checks WhoIs matches the asserted identity and caches K as alice. Step 2: alice signs a delegation with K; it travels via staff-proxy, or a pigeon; hr-api looks up K, verifies, and applies policy to alice. Step 3: without direct contact, a party that saw the binding first-hand can vouch for it, and is trusted only as far as the receiver trusts that party.">
+      <defs>
+        <marker id="r-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-member" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="r-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+
+      <text class="h" x="20" y="28">1. FIRST CONTACT: THE BINDING IS CHECKED AGAINST THE CONNECTION</text>
+
+      <rect class="box member" x="20" y="45" width="200" height="150" rx="8"/>
+      <text class="b" x="120" y="71" text-anchor="middle">alice's laptop</text>
+      <text class="mono" x="120" y="91" text-anchor="middle">alice@… (node n7)</text>
+      <text x="120" y="115" text-anchor="middle">makes keypair K,</text>
+      <text x="120" y="133" text-anchor="middle">signs with K:</text>
+      <text class="mono" x="40" y="157">{id: alice@ n7,</text>
+      <text class="mono" x="40" y="173"> key: K, t: now}</text>
+
+      <line class="e ok" x1="222" y1="120" x2="618" y2="120" marker-end="url(#r-ok)"/>
+      <text class="t-ok" x="420" y="108" text-anchor="middle">direct WireGuard connection</text>
+      <text class="mono" x="420" y="140" text-anchor="middle">self-signed binding</text>
+
+      <rect class="box ok" x="620" y="45" width="360" height="150" rx="8"/>
+      <text class="b" x="640" y="71">hr-api tsproxy</text>
+      <text x="640" y="95">1. WhoIs(connection) == id in the binding?</text>
+      <text x="640" y="115">2. signature valid with K?</text>
+      <text x="640" y="135">3. t is fresh?</text>
+      <text class="t-ok mono" x="640" y="161">cache: K → alice@ n7</text>
+      <text class="m" x="640" y="181">until a TTL ends or control changes n7</text>
+
+      <text class="h" x="20" y="238">2. LATER: ANYTHING SIGNED WITH K IS ALICE'S, HOWEVER IT ARRIVES</text>
+
+      <rect class="box member" x="20" y="255" width="200" height="130" rx="8"/>
+      <text class="b" x="120" y="281" text-anchor="middle">alice's laptop</text>
+      <text x="120" y="303" text-anchor="middle">signs with K:</text>
+      <text class="mono" x="40" y="327">{sub: alice,</text>
+      <text class="mono" x="40" y="343"> act: staff-proxy,</text>
+      <text class="mono" x="40" y="359"> aud: hr-api, exp}</text>
+
+      <line class="e member" x1="222" y1="320" x2="318" y2="320" marker-end="url(#r-m)"/>
+      <text class="t-member" x="270" y="308" text-anchor="middle">token</text>
+
+      <rect class="box" x="320" y="270" width="200" height="100" rx="8"/>
+      <text class="b" x="420" y="298" text-anchor="middle">staff-proxy</text>
+      <text class="mono" x="420" y="318" text-anchor="middle">tag:staff-proxy</text>
+      <text class="m" x="420" y="342" text-anchor="middle">(or a pigeon)</text>
+      <text class="m" x="420" y="358" text-anchor="middle">can't alter the token</text>
+
+      <line class="e ok" x1="522" y1="320" x2="618" y2="320" marker-end="url(#r-ok)"/>
+      <text class="mono" x="570" y="308" text-anchor="middle">relays</text>
+
+      <rect class="box ok" x="620" y="255" width="360" height="130" rx="8"/>
+      <text class="b" x="640" y="281">hr-api tsproxy + app</text>
+      <text x="640" y="305">1. look up K in the cache → alice@ n7</text>
+      <text x="640" y="325">2. signature, aud and exp valid</text>
+      <text x="640" y="345">3. act == WhoIs caller (tag:staff-proxy)</text>
+      <text class="t-ok" x="640" y="369">policy(actor, sub) → Alice's record</text>
+
+      <rect class="box" x="20" y="420" width="960" height="104" rx="8"/>
+      <text class="b" x="40" y="444">3. No direct contact? A relayed binding, SDSI-style</text>
+      <text class="mono" x="40" y="468">staff-proxy signs: {K = alice@ n7, observed first-hand at t}</text>
+      <text x="40" y="492">hr-api accepts this only if it trusts staff-proxy to vouch for names. That's "staff-proxy's alice":</text>
+      <text x="40" y="510">no global authority, just parties that saw the binding themselves, each trusted as far as the receiver chooses.</text>
+    </svg>
+    </div>
+    <figcaption>Nobody issues anything. Each relying party checks the binding against a WireGuard connection it saw itself, and WhoIs is the only outside fact. Replay fails: if another node sends alice's binding over its own connection, WhoIs doesn't match. Requiring the identity inside the binding is what stops a node from getting someone else's key attributed to itself. There are two limits. First, a direct check needs a connection, so in the HR example alice needs a grant to hr-api (say, a key-registration port only), or step 3. Second, the cache can go stale: a binding is only as current as control's view of the node, so give it a TTL and re-check on reconnect. This is a design sketch; none of it is in tsproxy.</figcaption>
   </figure>
 </section>
 </main>
