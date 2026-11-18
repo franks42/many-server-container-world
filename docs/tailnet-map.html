@@ -72,7 +72,7 @@ pre { margin: 0; font-family: var(--mono); font-size: 13px; line-height: 1.5; ov
 <main>
 <header>
   <h1>Container Tailnet Map</h1>
-  <p class="lede">The many-server-container-world nodes on your real tailnet: where they run, what the policy lets them reach, and the path the failing <code>web → db</code> call took before the fix. Section 4 shows the same nodes on the local Headscale tailnet, section 5 is a statechart of how everything boots, section 6 shows how netmaps scale, and section 7 sketches role assumption.</p>
+  <p class="lede">The many-server-container-world nodes on your real tailnet: where they run, what the policy lets them reach, and the path the failing <code>web → db</code> call took before the fix. Section 4 shows the same nodes on the local Headscale tailnet, section 5 is a statechart of how everything boots, section 6 shows how netmaps scale, section 7 sketches role assumption, and section 8 a shared role proxy with audit.</p>
 </header>
 
 <section>
@@ -708,6 +708,81 @@ stateDiagram-v2
     </svg>
     </div>
     <figcaption>"Assuming admin" means sending a request through the admin identity. The api service sees only <code>tag:admin</code> and applies the admin grant. Access ends when the ephemeral node goes away. Unlike AWS's AssumeRole, the target doesn't learn <em>who</em> assumed the role. If you need that for auditing, the admin tsproxy would have to forward its own verified caller identity.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>8. A shared role proxy, with audit</h2>
+  <p>A cleaner version of section 7. The admin role lives in one shared service, <code>admin-proxy</code>, and nobody else holds an admin credential. The policy decides who may reach it, which is the assumption policy. The proxy forwards requests as itself and adds who it is acting for. The target believes that header only from callers it trusts as forwarders.</p>
+  <figure>
+    <div class="scroll fig-wide">
+    <svg viewBox="0 0 1000 470" role="img" aria-label="Frank, in group:ops, calls admin-proxy. admin-proxy checks and logs him, then calls api as tag:admin-proxy with an On-Behalf-Of header. api's tsproxy keeps the header because admin-proxy is a trusted forwarder. A staff node sending a forged On-Behalf-Of header has it stripped.">
+      <defs>
+        <marker id="p-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-member" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="p-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+        <marker id="p-l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-leak" d="M0,0 L10,5 L0,10 z"/></marker>
+      </defs>
+
+      <rect class="box member" x="20" y="70" width="180" height="110" rx="8"/>
+      <text class="b" x="110" y="98" text-anchor="middle">your laptop</text>
+      <text class="mono" x="110" y="120" text-anchor="middle">frank@…</text>
+      <text class="t-member" x="110" y="142" text-anchor="middle">in group:ops</text>
+      <text class="m" x="110" y="164" text-anchor="middle">user device</text>
+
+      <rect class="box" x="300" y="40" width="220" height="170" rx="8" style="stroke: var(--fg); stroke-width: 2"/>
+      <text class="b" x="410" y="66" text-anchor="middle">admin-proxy</text>
+      <text class="mono" x="410" y="86" text-anchor="middle">tag:admin-proxy</text>
+      <text x="320" y="114">1. WhoIs → frank@…</text>
+      <text x="320" y="134">2. check time window, log</text>
+      <text x="320" y="154">3. forward as itself</text>
+      <text class="mono" x="320" y="178">+ X-Tailnet-On-Behalf-Of</text>
+      <text class="mono" x="320" y="194">  : frank@…</text>
+
+      <rect class="box ok" x="620" y="40" width="190" height="170" rx="8"/>
+      <text class="b" x="715" y="66" text-anchor="middle">api tsproxy</text>
+      <text x="715" y="90" text-anchor="middle">WhoIs →</text>
+      <text class="mono" x="715" y="108" text-anchor="middle">tag:admin-proxy</text>
+      <text x="715" y="134" text-anchor="middle">trusted forwarder?</text>
+      <text class="t-ok" x="715" y="154" text-anchor="middle">yes: keep</text>
+      <text class="mono" x="715" y="174" text-anchor="middle">On-Behalf-Of</text>
+      <text class="m" x="715" y="196" text-anchor="middle">strip all other X-Tailnet-*</text>
+
+      <rect class="box ok" x="850" y="60" width="130" height="130" rx="8"/>
+      <text class="b" x="915" y="86" text-anchor="middle">api app</text>
+      <text x="915" y="108" text-anchor="middle">admin ops</text>
+      <text x="915" y="126" text-anchor="middle">allowed</text>
+      <text class="m" x="915" y="152" text-anchor="middle">audit log:</text>
+      <text class="mono" x="915" y="170" text-anchor="middle">frank via</text>
+      <text class="mono" x="915" y="184" text-anchor="middle">admin-proxy</text>
+
+      <line class="e member" x1="202" y1="125" x2="298" y2="125" marker-end="url(#p-m)"/>
+      <text class="t-member" x="250" y="114" text-anchor="middle">as frank@</text>
+      <line class="e ok" x1="522" y1="125" x2="618" y2="125" marker-end="url(#p-ok)"/>
+      <text class="mono" x="570" y="100" text-anchor="middle">tag:admin-</text>
+      <text class="mono" x="570" y="114" text-anchor="middle">proxy + OBO</text>
+      <line class="e ok" x1="812" y1="125" x2="848" y2="125" marker-end="url(#p-ok)"/>
+
+      <rect class="box leak" x="20" y="250" width="180" height="70" rx="8"/>
+      <text class="b" x="110" y="278" text-anchor="middle">staff node</text>
+      <text class="mono" x="110" y="298" text-anchor="middle">tag:staff</text>
+      <line class="e leak" x1="202" y1="285" x2="618" y2="285" marker-end="url(#p-l)"/>
+      <text class="t-leak" x="410" y="274" text-anchor="middle">forged X-Tailnet-On-Behalf-Of: frank@…</text>
+      <rect class="box leak" x="620" y="250" width="190" height="70" rx="8"/>
+      <text class="b" x="715" y="276" text-anchor="middle">api tsproxy</text>
+      <text x="715" y="296" text-anchor="middle">tag:staff isn't trusted:</text>
+      <text class="t-leak" x="715" y="312" text-anchor="middle">header stripped</text>
+
+      <rect class="box" x="20" y="350" width="960" height="104" rx="8"/>
+      <text class="b" x="40" y="374">policy and config</text>
+      <text class="mono" x="40" y="398">{"src": ["group:ops"],       "dst": ["tag:admin-proxy"], "ip": ["80"]}</text>
+      <text class="mono m" x="700" y="398">who may assume admin</text>
+      <text class="mono" x="40" y="418">{"src": ["tag:admin-proxy"], "dst": ["tag:api"], "app": {… read, write, migrate}}</text>
+      <text class="mono m" x="700" y="418">what admin may do</text>
+      <text class="mono" x="40" y="438">api tsproxy: TRUSTED_FORWARDERS=tag:admin-proxy</text>
+      <text class="mono m" x="700" y="438">whose On-Behalf-Of is believed</text>
+    </svg>
+    </div>
+    <figcaption>Three rules carry the whole design. A group grant decides who may assume the role. A tag grant decides what the role may do. A forwarder list on the receiving side decides who may vouch for an original caller. With several hops, each trusted forwarder appends to <code>On-Behalf-Of</code> rather than replacing it, like the <code>act</code> chain in OAuth token exchange. None of this exists in tsproxy yet; it's a design sketch.</figcaption>
   </figure>
 </section>
 </main>
