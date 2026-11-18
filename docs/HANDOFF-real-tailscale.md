@@ -150,3 +150,18 @@ nodes disappear on their own once offline.
   their own record, and a compromised proxy can't switch `sub`. Also try a
   relayed binding (SDSI-style, vouched for by a party that saw it
   first-hand), and compare with tsidp token exchange (`TSIDP_ENABLE_STS=1`).
+  Wire format (HTTP headers; deliberately not `X-Tailnet-*`, which
+  ingress strips as spoofable):
+  - `Tailnet-Key-Binding`: the client's self-signed JWS `{id, key, t}`
+    (Ed25519), sent on every request. Ingress verifies it, checks `id`
+    against WhoIs and caches thumbprint → identity.
+  - `X-Tailnet-Key`: ingress → its own app over loopback, the verified key
+    thumbprint. A plain header is fine inside that trust boundary.
+  - `Tailnet-Assertion`: the delegation JWS `{sub, act, aud, exp}` signed
+    with the client's key. `act` must match the WhoIs caller at the
+    receiving hop.
+  - `Tailnet-Binding-Witness`: a forwarding proxy's signed observation
+    `{binding: hash, observed: <WhoIs id>, t}`, signed with the proxy's own
+    key, for receivers that never met the client. They learn the proxy's
+    key from their own direct connection to it and decide whether to trust
+    it as a witness.
